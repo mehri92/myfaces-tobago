@@ -67,18 +67,7 @@ public class NavigationState implements Serializable {
   @PostConstruct
   public void init() {
     currentNode = tree.findByViewId(FacesContext.getCurrentInstance().getViewRoot().getViewId());
-    initState();
-  }
-
-  private void initState() {
-    if (currentNode != null) {
-      final TreePath treePath = currentNode.getTreePath();
-      state.getSelectedState().clearAndSelect(treePath);
-      if (!treePath.isRoot()) {
-        state.getExpandedState().collapseAllButRoot();
-        state.getExpandedState().expand(treePath, true);
-      }
-    }
+    state.getExpandedState().expandAll();
   }
 
   public NavigationNode getCurrentNode() {
@@ -129,7 +118,6 @@ public class NavigationState implements Serializable {
         currentNode = node;
         LOG.info("Navigate to '" + currentNode.getOutcome() + "'");
       }
-      initState();
       return currentNode.getOutcome();
     }
   }
