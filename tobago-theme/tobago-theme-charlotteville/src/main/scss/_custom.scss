@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-// Menu
+// Main Nav
 .tobago-dropdown-menu {
   background-color: #ffffff !important;
 
@@ -36,6 +36,11 @@
       border: 1px solid #61b5b5;
     }
   }
+}
+
+// Side Nav
+tobago-tree label {
+  margin-top: 15px;
 }
 
 // Footer
@@ -70,6 +75,12 @@ h5,
   color: #333333 !important;
 }
 
+.tobago-header {
+  h2, .h2, h3, .h3, h4, .h4 {
+    margin-top: 14px;
+  }
+}
+
 .tobago-link {
   transition: 0.3s ease;
 
@@ -85,9 +96,9 @@ tobago-tree {
   }
 }
 
-.tobago-header {
+/*.tobago-header {
   margin-top: 30px;
-}
+}*/
 
 demo-highlight {
   pre {
@@ -105,6 +116,12 @@ demo-highlight {
 
     }
   }
+}
+
+// Java snippets
+code[class*="language-"],
+:not(pre) > code[class*="language-"] {
+  font-size: .8em;
 }
 
 tobago-form {
@@ -126,16 +143,26 @@ tobago-form {
 }
 
 // Forms
-.form-select,
-.form-control,
-.form-check-input {
-  background-color: #f7f7f7 !important;
-  border: 1px solid #d6dde3 !important;
+.tobago-label-container .form-select,
+.form-control:not(:disabled),
+.form-check-input:not(:checked) {
+  background-color: #f7f7f7;
+  border: 1px solid #d6dde3;
 
   &:focus {
     background-color: unset;
     border-color: unset;
   }
+}
+
+.form-control[type="text"]:not([readonly]):not([disabled]) {
+  color: #666666;
+}
+
+.tobago-label-container .form-control:disabled,
+.tobago-label-container .form-select:disabled {
+  background-color: #d8d9db;
+  border: 1px solid #d6dde3;
 }
 
 .form-control-plaintext {
@@ -150,6 +177,16 @@ tobago-form {
 .form-check-label,
 .col-form-label {
   color: #333333;
+}
+
+// Textarea
+textarea:not([readonly]):not([disabled]) {
+  color: #666666;
+}
+
+// Date
+.form-control[type="date"]:not([readonly]):not([disabled]) {
+  color: #666666;
 }
 
 // Card
