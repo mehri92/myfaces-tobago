@@ -19,9 +19,8 @@
 .tobago-dropdown-menu {
   background-color: #ffffff !important;
 
-  .form-check-label,
-  .dropdown-item span {
-    color: #555555 !important;
+  .form-check-label {
+    color: #555555;
   }
 }
 
@@ -36,6 +35,19 @@
       border: 1px solid #61b5b5;
     }
   }
+
+  .tobago-link {
+    color: #333333 !important;
+  }
+
+  button.tobago-link.dropdown-item:disabled span {
+    color: #555555;
+    opacity: .5;
+  }
+}
+
+.tobago-dropdown-menu {
+  --bs-dropdown-min-width: 13rem !important;
 }
 
 // Side Nav
@@ -69,7 +81,6 @@ h2,
 h3,
 h4,
 h5,
-.tobago-link,
 .tobago-section-content,
 .figure-caption {
   color: #333333 !important;
