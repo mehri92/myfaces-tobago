@@ -166,8 +166,10 @@ tobago-form {
   }
 }
 
-.form-control[type="text"]:not([readonly]):not([disabled]) {
-  color: #666666;
+.form-control[type="text"], .form-control[type="date"], textarea {
+  &:not([readonly]):not([disabled]) {
+    color: #666666;
+  }
 }
 
 .tobago-label-container .form-control:disabled,
