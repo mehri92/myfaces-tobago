@@ -83,7 +83,7 @@
       to the <code class="language-markup">&lt;tc:file/></code> tag.</p>
     <tc:file label="Ajax" value="#{uploadController.fileAjax}" id="fileAjax">
       <tc:validateFileItem maxSize="1048576"/>
-      <f:ajax listener="#{uploadController.uploadAjax}" render="s3 list :page:messages"/>
+      <f:ajax listener="#{uploadController.uploadAjax}" render="list :page:messages"/>
     </tc:file>
   </tc:section>
 
@@ -112,7 +112,7 @@
         <tc:column label="Name">
           <tc:out value="#{item.name}"/>
         </tc:column>
-        <tc:column label="Type">
+        <tc:column label="Type" align="right">
           <tc:out value="#{item.type}"/>
         </tc:column>
         <tc:column label="Size">

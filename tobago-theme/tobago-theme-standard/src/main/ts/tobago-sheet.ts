@@ -16,7 +16,6 @@
  */
 
 import {Page} from "./tobago-page";
-import {Key} from "./tobago-key";
 import {Css} from "./tobago-css";
 import {ClientBehaviors} from "./tobago-client-behaviors";
 import {ColumnSelector} from "./tobago-column-selector";
@@ -92,97 +91,11 @@ export class Sheet extends HTMLElement {
       this.columnSelector = new ColumnSelector(this);
     }
 
-    // synchronize column widths ----------------------------------------------------------------------------------- //
-
-    // basic idea: there are two possible sources for the sizes:
-    // 1. the columns attribute of <tc:sheet> like {"columns":[1.0,1.0,1.0]}, held by data attribute "tobago-layout"
-    // 2. the hidden field which may contain a value like ",300,200,100,"
-    //
-    // The 1st source usually is the default set by the developer.
-    // The 2nd source usually is the value set by the user manipulating the column widths.
-    //
-    // So, if the 2nd is set, we use it, if not set, we use the 1st source.
-
-    const columnWidths = this.loadColumnWidths();
-    console.info("columnWidths: %s", JSON.stringify(columnWidths));
-    if (columnWidths && columnWidths.length === 0) { // active, but empty
-      // otherwise use the layout definition
-      let tokens: any[] = JSON.parse(this.dataset.tobagoLayout).columns;
-      const columnRendered = this.isColumnRendered();
-
-      const headerCols = this.getHeaderCols();
-      const bodyTable = this.getBodyTable();
-      const bodyCols = this.getBodyCols();
-      const borderLeftWidth
-          = Number(getComputedStyle(bodyTable.querySelector("td:first-child")).borderLeftWidth.slice(0, -2));
-      const borderRightWidth
-          = Number(getComputedStyle(bodyTable.querySelector("td:last-child")).borderRightWidth.slice(0, -2));
-      const tableWidth = bodyTable.offsetWidth - (borderLeftWidth + borderRightWidth) / 2;
-
-      console.assert(headerCols.length - 1 === bodyCols.length,
-          "header and body column number doesn't match: %d != %d ", headerCols.length - 1, bodyCols.length);
-
-      while (tokens.length < headerCols.length - 2) {
-        tokens = [...tokens, ...tokens];
-      }
-      tokens = tokens.slice(0, headerCols.length - 2);
-
-      let sumRelative = 0; // tbd: is this needed?
-      let widthRelative = tableWidth;
-      let r = 0;
-      for (let i = 0; i < tokens.length; i++) {
-        if (columnRendered[i]) {
-          if (typeof tokens[i] === "number") {
-            sumRelative += tokens[i];
-          } else if (typeof tokens[i] === "object" && tokens[i].measure !== undefined) {
-            const intValue = parseInt(tokens[i].measure);
-            if (tokens[i].measure.lastIndexOf("px") > 0) {
-              widthRelative -= intValue;
-            } else if (tokens[i].measure.lastIndexOf("%") > 0) {
-              widthRelative -= tableWidth * intValue / 100;
-            }
-          } else if (tokens[i] === "auto") {
-            const value = headerCols.item(r).offsetWidth;
-            widthRelative -= value;
-            tokens[i] = {measure: `${value}px`}; // converting "auto" to a specific value
-          } else {
-            console.debug("(layout columns a) auto? token[i]='%s' i=%i", tokens[i], i);
-          }
-        }
-      }
-      if (widthRelative < 0) {
-        widthRelative = 0;
-      }
-
-      r = 0;
-      for (let i = 0; i < tokens.length; i++) {
-        let colWidth = 0;
-        if (columnRendered[i]) {
-          if (typeof tokens[i] === "number") {
-            colWidth = tokens[i] * widthRelative / sumRelative;
-          } else if (typeof tokens[i] === "object" && tokens[i].measure !== undefined) {
-            const intValue = parseInt(tokens[i].measure);
-            if (tokens[i].measure.lastIndexOf("px") > 0) {
-              colWidth = intValue;
-            } else if (tokens[i].measure.lastIndexOf("%") > 0) {
-              colWidth = tableWidth * intValue / 100;
-            }
-          } else {
-            console.debug("(layout columns b) auto? token[i]='%s' i=%i", tokens[i], i);
-          }
-          if (colWidth > 0) { // because tokens[i] == "auto"
-            headerCols.item(r).setAttribute("width", String(colWidth));
-            bodyCols.item(r).setAttribute("width", String(colWidth));
-          }
-          r++;
-        }
-      }
-    }
-    this.addHeaderFillerWidth();
+    this.initScrollbarFiller();
 
     // resize column: mouse events -------------------------------------------------------------------------------- //
 
-    for (const resizeElement of this.querySelectorAll(".tobago-resize")) {
+    for (const resizeElement of this.querySelectorAll(":scope > header > table > thead > tr > th > .tobago-resize")) {
       resizeElement.addEventListener("click", function (): boolean {
         return false;
       });
@@ -190,7 +103,7 @@ export class Sheet extends HTMLElement {
     }
 
     // scrolling -------------------------------------------------------------------------------------------------- //
-    const sheetBody = this.getBody();
+    const sheetBody = this.body;
 
     // restore scroll position
     if (!this.lazy) {
@@ -205,7 +118,7 @@ export class Sheet extends HTMLElement {
     sheetBody.addEventListener("scroll", this.scrollAction.bind(this));
 
     // add selection listeners ------------------------------------------------------------------------------------ //
-    this.getRowElements().forEach((row) => this.initSelectionListener(row));
+    this.rowElements.forEach((row) => this.initSelectionListener(row));
     if (this.columnSelector && this.columnSelector.headerElement.type === "checkbox") {
       this.columnSelector.headerElement.addEventListener("click", this.initSelectAllCheckbox.bind(this));
     }
@@ -227,168 +140,39 @@ export class Sheet extends HTMLElement {
         tableBody.insertAdjacentHTML("beforeend", Sheet.getDummyRowTemplate(columns, i));
       }
 
-      this.sheetBody.addEventListener("scroll", this.lazyCheck.bind(this));
+      this.body.addEventListener("scroll", this.lazyCheck.bind(this));
 
       const lazyScrollPosition = this.lazyScrollPosition;
       const firstVisibleRow
           = this.tableBody.querySelector<HTMLTableRowElement>(`tr[row-index='${lazyScrollPosition[0]}']`);
       if (firstVisibleRow) {
-        this.sheetBody.scrollTop = firstVisibleRow.offsetTop + lazyScrollPosition[1];
+        this.body.scrollTop = firstVisibleRow.offsetTop + lazyScrollPosition[1];
         //in Firefox setting "scrollTop" triggers scroll event -> lazyCheck()
       }
     }
 
     // init paging by pages ---------------------------------------------------------------------------------------- //
 
-/*
-    for (const pagingText of this.querySelectorAll(".tobago-paging")) {
+    /*
+        for (const pagingText of this.querySelectorAll(".tobago-paging")) {
 
-      console.warn("register ************** click on paging");
-      pagingText.addEventListener("click", this.clickOnPaging.bind(this));
+          console.warn("register ************** click on paging");
+          pagingText.addEventListener("click", this.clickOnPaging.bind(this));
 
-      const pagingInput = pagingText.querySelector("input");
-      console.warn("register ************** blur on paging");
-      pagingInput.addEventListener("blur", this.blurPaging.bind(this));
+          const pagingInput = pagingText.querySelector("input");
+          console.warn("register ************** blur on paging");
+          pagingInput.addEventListener("blur", this.blurPaging.bind(this));
 
-      console.warn("register ************** keydown on paging");
-      pagingInput.addEventListener("keydown", function (event: KeyboardEvent): void {
-        if (event.key === Key.ENTER) {
-          event.stopPropagation();
-          event.preventDefault();
-          event.currentTarget.dispatchEvent(new Event("blur"));
+          console.warn("register ************** keydown on paging");
+          pagingInput.addEventListener("keydown", function (event: KeyboardEvent): void {
+            if (event.key === Key.ENTER) {
+              event.stopPropagation();
+              event.preventDefault();
+              event.currentTarget.dispatchEvent(new Event("blur"));
+            }
+          });
         }
-      });
-    }
-*/
-  }
-
-  // attribute getter + setter ---------------------------------------------------------- //
-  get scrollPosition(): number[] {
-    return JSON.parse(this.hiddenInputScrollPosition.value);
-  }
-
-  set scrollPosition(value: number[]) {
-    this.hiddenInputScrollPosition.value = JSON.stringify(value);
-  }
-
-  private get hiddenInputScrollPosition(): HTMLInputElement {
-    return this.querySelector("input[id$='::scrollPosition']");
-  }
-
-  public get selectable(): Selectable {
-    return Selectable[this.dataset.tobagoSelectionMode];
-  }
-
-  get selected(): Set<number> {
-    return new Set<number>(JSON.parse(this.hiddenInputSelected.value));
-  }
-
-  set selected(value: Set<number>) {
-    const oldSelectedSet = this.selected;
-    this.hiddenInputSelected.value = JSON.stringify(Array.from(value));
-
-    const fireSelectionChangeEvent = oldSelectedSet.size !== value.size
-        || ![...oldSelectedSet].every((x) => value.has(x));
-    if (fireSelectionChangeEvent) {
-      this.dispatchEvent(new CustomEvent(ClientBehaviors.ROW_SELECTION_CHANGE, {
-        detail: {
-          selection: value,
-          rowsOnPage: this.rowsOnPage,
-          rowCount: this.rowCount
-        },
-      }));
-    }
-  }
-
-  private get hiddenInputSelected(): HTMLInputElement {
-    return this.querySelector("input[id$='::selected']");
-  }
-
-  get lastClickedRowIndex(): number {
-    return Number(this.dataset.tobagoLastClickedRowIndex);
-  }
-
-  set lastClickedRowIndex(value: number) {
-    this.dataset.tobagoLastClickedRowIndex = String(value);
-  }
-
-  get lazy(): boolean {
-    return this.hasAttribute("lazy");
-  }
-
-  set lazy(update: boolean) {
-    if (update) {
-      this.setAttribute("lazy", "");
-    } else {
-      this.removeAttribute("lazy");
-    }
-  }
-
-  get lazyScrollPosition(): number[] {
-    return JSON.parse(this.hiddenInputLazyScrollPosition.value);
-  }
-
-  set lazyScrollPosition(value: number[]) {
-    this.hiddenInputLazyScrollPosition.value = JSON.stringify(value);
-  }
-
-  private get hiddenInputLazyScrollPosition(): HTMLInputElement {
-    return this.querySelector("input[id$='::lazyScrollPosition']");
-  }
-
-  get lazyUpdate(): boolean {
-    return this.hasAttribute("lazy-update");
-  }
-
-  get lazyRows(): number {
-    return parseInt(this.getAttribute("lazy-rows"));
-  }
-
-  get first(): number {
-    return parseInt(this.dataset.tobagoFirst);
-  }
-
-  get rows(): number {
-    return parseInt(this.getAttribute("rows"));
-  }
-
-  get rowCount(): number {
-    return parseInt(this.getAttribute("row-count"));
-  }
-
-  get rowsOnPage(): number {
-    if (this.lazy || this.rows === 0 || this.rows >= this.rowCount) {
-      return this.rowCount;
-    } else {
-      return Math.min(this.rowCount - this.first, this.rows);
-    }
-  }
-
-  get sheetBody(): HTMLDivElement {
-    return this.querySelector(".tobago-body");
-  }
-
-  get tableBody(): HTMLTableSectionElement {
-    return this.querySelector(".tobago-body tbody");
-  }
-
-  get firstVisibleRowIndex(): number {
-    const rowElements = this.tableBody.rows;
-    let min = 0;
-    let max = rowElements.length;
-    let index: number;
-    while (min < max) {
-      index = Math.round((max - min) / 2) + min;
-      if (rowElements[index] === undefined
-          || rowElements[index].offsetTop > this.sheetBody.scrollTop) {
-        index--;
-        max = index;
-      } else {
-        min = index;
-      }
-    }
-
-    return this.getRowIndex(rowElements[index]);
+    */
   }
 
   // -------------------------------------------------------------------------------------- //
@@ -561,7 +345,7 @@ export class Sheet extends HTMLElement {
       const firstRow
           = this.tableBody.querySelector<HTMLTableRowElement>(`tr[row-index='${lazyScrollPosition[0]}']`);
       if (firstRow) {
-        this.sheetBody.scrollTop = firstRow.offsetTop + lazyScrollPosition[1];
+        this.body.scrollTop = firstRow.offsetTop + lazyScrollPosition[1];
         //in Firefox setting "scrollTop" triggers scroll event -> lazyCheck()
       }
 
@@ -588,15 +372,6 @@ Status: ${data.status}
 Type: ${data.type}`);
   }
 
-  loadColumnWidths(): number[] {
-    const hidden = document.getElementById(this.id + "::widths");
-    if (hidden) {
-      return JSON.parse(hidden.getAttribute("value"));
-    } else {
-      return undefined;
-    }
-  }
-
   saveColumnWidths(widths: number[]): void {
     const hidden = document.getElementById(this.id + "::widths");
     if (hidden) {
@@ -606,15 +381,33 @@ Type: ${data.type}`);
     }
   }
 
-  isColumnRendered(): boolean[] {
-    const hidden = document.getElementById(this.id + "::rendered");
-    return JSON.parse(hidden.getAttribute("value")) as boolean[];
+  private initScrollbarFiller(): void {
+    // set width of the scrollbar filler
+    if (this.scrollbarFiller) {
+      /* Use min/maxWidth instead of width to force the browser to use the exact px value. Otherwise, it is possible
+      that the browser use 14,785px instead of 15px. */
+      this.scrollbarFiller.style.minWidth = Sheet.SCROLL_BAR_SIZE + "px";
+      this.scrollbarFiller.style.maxWidth = Sheet.SCROLL_BAR_SIZE + "px";
+
+      this.updateScrollbarFillerVisibility();
+
+      // Initialize observer to show/hide scrollbar filler, depending on whether the sheet body has a scrollbar or not.
+      const resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.target === this.body) {
+            this.updateScrollbarFillerVisibility();
+          }
+        }
+      });
+      resizeObserver.observe(this.body);
+    }
   }
 
-  addHeaderFillerWidth(): void {
-    const last = document.getElementById(this.id).querySelector("tobago-sheet header table col:last-child");
-    if (last) {
-      last.setAttribute("width", String(Sheet.SCROLL_BAR_SIZE));
+  private updateScrollbarFillerVisibility() {
+    if (this.body.offsetWidth > this.body.clientWidth) {
+      this.scrollbarFiller.classList.add(Css.TOBAGO_SHOW);
+    } else {
+      this.scrollbarFiller.classList.remove(Css.TOBAGO_SHOW);
     }
   }
 
@@ -624,14 +417,22 @@ Type: ${data.type}`);
 
     // begin resizing
     console.debug("down");
+    this.headerCols.forEach((col, i) => {
+      if (!col.classList.contains(Css.TOBAGO_ROW_FILLER) && !col.classList.contains(Css.TOBAGO_BEHAVIOR_CONTAINER)) {
+        col.style.width = getComputedStyle(col).width;
+      } else if (col.classList.contains(Css.TOBAGO_ROW_FILLER)) {
+        col.style.width = "auto";
+      }
+      this.bodyCols.item(i).style.width = col.style.width;
+    });
 
     const resizeElement = event.currentTarget as HTMLElement;
     const columnIndex = parseInt(resizeElement.dataset.tobagoColumnIndex);
-    const headerColumn = this.getHeaderCols().item(columnIndex);
+    const headerColumn = this.headerCols.item(columnIndex);
     this.mousemoveData = {
       columnIndex: columnIndex,
       originalClientX: event.clientX,
-      originalHeaderColumnWidth: parseInt(headerColumn.getAttribute("width")),
+      originalHeaderColumnWidth: parseInt(getComputedStyle(headerColumn).width),
       mousemoveListener: this.mousemove.bind(this),
       mouseupListener: this.mouseup.bind(this)
     };
@@ -640,68 +441,33 @@ Type: ${data.type}`);
     document.addEventListener("mouseup", this.mousemoveData.mouseupListener);
   }
 
-  mousemove(event: MouseEvent): boolean {
-    console.debug("move");
+  private mousemove(event: MouseEvent): void {
     let delta = event.clientX - this.mousemoveData.originalClientX;
     delta = -Math.min(-delta, this.mousemoveData.originalHeaderColumnWidth - 10);
     const columnWidth = this.mousemoveData.originalHeaderColumnWidth + delta;
-    this.getHeaderCols().item(this.mousemoveData.columnIndex).setAttribute("width", String(columnWidth));
-    this.getBodyCols().item(this.mousemoveData.columnIndex).setAttribute("width", String(columnWidth));
+    this.headerCols.item(this.mousemoveData.columnIndex).style.width = columnWidth + "px";
+    this.bodyCols.item(this.mousemoveData.columnIndex).style.width = columnWidth + "px";
     if (window.getSelection) {
       window.getSelection().removeAllRanges();
     }
-    return false;
   }
 
-  mouseup(event: MouseEvent): boolean {
+  private mouseup(event: MouseEvent): void {
     console.debug("up");
 
     // switch off the mouse move listener
     document.removeEventListener("mousemove", this.mousemoveData.mousemoveListener);
     document.removeEventListener("mouseup", this.mousemoveData.mouseupListener);
-    // copy the width values from the header to the body, (and build a list of it)
-    const tokens: any[] = JSON.parse(this.dataset.tobagoLayout).columns;
-    const columnRendered = this.isColumnRendered();
-    const columnWidths = this.loadColumnWidths();
-
-    const bodyTable = this.getBodyTable();
-    const headerCols = this.getHeaderCols();
-    const bodyCols = this.getBodyCols();
     const widths: number[] = [];
-    let usedWidth = 0;
-    let headerBodyColCount = 0;
-    for (let i = 0; i < columnRendered.length; i++) {
-      if (columnRendered[i]) {
-        // last column is the filler column
-        const newWidth = parseInt(headerCols.item(headerBodyColCount).getAttribute("width"));
-        // for the hidden field
-        widths[i] = newWidth;
-        usedWidth += newWidth;
 
-        const oldWidth = parseInt(bodyCols.item(headerBodyColCount).getAttribute("width"));
-        if (oldWidth !== newWidth) {
-          bodyCols.item(headerBodyColCount).setAttribute("width", String(newWidth));
-        }
-        headerBodyColCount++;
-      } else if (columnWidths !== undefined && columnWidths.length >= i) {
-        widths[i] = columnWidths[i];
-      } else {
-        if (typeof tokens[i] === "number") {
-          widths[i] = 100;
-        } else if (typeof tokens[i] === "object" && tokens[i].measure !== undefined) {
-          const intValue = parseInt(tokens[i].measure);
-          if (tokens[i].measure.lastIndexOf("px") > 0) {
-            widths[i] = intValue;
-          } else if (tokens[i].measure.lastIndexOf("%") > 0) {
-            widths[i] = parseInt(bodyTable.style.width) / 100 * intValue;
-          }
-        }
+    this.headerCols.forEach((col, i) => {
+      if (!col.classList.contains(Css.TOBAGO_ROW_FILLER) && !col.classList.contains(Css.TOBAGO_BEHAVIOR_CONTAINER)) {
+        widths[i] = parseInt(getComputedStyle(col).width);
       }
-    }
+    });
 
     // store the width values in a hidden field
     this.saveColumnWidths(widths);
-    return false;
   }
 
   scrollAction(event: Event): void {
@@ -832,7 +598,7 @@ Type: ${data.type}`);
       }
     } else {
       const rowIndexes: number[] = [];
-      this.getRowElements().forEach((rowElement) => {
+      this.rowElements.forEach((rowElement) => {
         if (rowElement.hasAttribute("row-index")) {
           rowIndexes.push(Number(rowElement.getAttribute("row-index")));
         }
@@ -859,7 +625,7 @@ Type: ${data.type}`);
   private syncSelected(event: CustomEvent) {
     const selected = event ? event.detail.selection : this.selected;
 
-    this.getRowElements().forEach((rowElement) => {
+    this.rowElements.forEach((rowElement) => {
       const isColumnPanel = rowElement.classList.contains(Css.TOBAGO_COLUMN_PANEL);
       const rowIndex = Number(isColumnPanel ? rowElement.getAttribute("name") : rowElement.getAttribute("row-index"));
       const inputElement = !isColumnPanel ? this.columnSelector?.rowElement(rowElement) : null;
@@ -894,88 +660,211 @@ Type: ${data.type}`);
     }
   }
 
-/*
-  clickOnPaging(event: MouseEvent): void {
-    const element = event.currentTarget as HTMLElement;
+  /*
+    clickOnPaging(event: MouseEvent): void {
+      const element = event.currentTarget as HTMLElement;
 
-    console.warn("execute  ************** click on paging");
-    const output: HTMLElement = element.querySelector("span");
-    output.style.display = "none";
+      console.warn("execute  ************** click on paging");
+      const output: HTMLElement = element.querySelector("span");
+      output.style.display = "none";
 
-    const input: HTMLInputElement = element.querySelector("input");
-    input.style.display = "initial";
-    input.focus();
-    input.select();
-  }
-*/
-
-/*
-  blurPaging(event: FocusEvent): void {
-    console.warn("execute  ************** blur on paging");
-    const input = event.currentTarget as HTMLInputElement;
-    const output: HTMLElement = input.parentElement.querySelector("span");
-    const number = Number.parseInt(input.value); // sanitizing
-    if (number > 0 && number.toString() !== output.innerHTML) {
-      console.debug("Reloading sheet '%s' old value='%s' new value='%s'", this.id, output.innerHTML, number);
-      output.innerHTML = number.toString();
-      faces.ajax.request(
-          input.id,
-          null,
-          {
-            params: {
-              "jakarta.faces.behavior.event": "reload"
-            },
-            execute: this.id,
-            render: this.id
-          });
-    } else {
-      console.info("no update needed");
-      input.value = output.innerHTML;
-      input.style.display = "none";
-      output.style.display = "initial";
+      const input: HTMLInputElement = element.querySelector("input");
+      input.style.display = "initial";
+      input.focus();
+      input.select();
     }
-  }
-*/
+  */
+
+  /*
+    blurPaging(event: FocusEvent): void {
+      console.warn("execute  ************** blur on paging");
+      const input = event.currentTarget as HTMLInputElement;
+      const output: HTMLElement = input.parentElement.querySelector("span");
+      const number = Number.parseInt(input.value); // sanitizing
+      if (number > 0 && number.toString() !== output.innerHTML) {
+        console.debug("Reloading sheet '%s' old value='%s' new value='%s'", this.id, output.innerHTML, number);
+        output.innerHTML = number.toString();
+        faces.ajax.request(
+            input.id,
+            null,
+            {
+              params: {
+                "jakarta.faces.behavior.event": "reload"
+              },
+              execute: this.id,
+              render: this.id
+            });
+      } else {
+        console.info("no update needed");
+        input.value = output.innerHTML;
+        input.style.display = "none";
+        output.style.display = "initial";
+      }
+    }
+  */
 
   syncScrolling(): void {
     // sync scrolling of body to header
-    const header = this.getHeader();
+    const header = this.header;
     if (header) {
-      header.scrollLeft = this.getBody().scrollLeft;
+      header.scrollLeft = this.body.scrollLeft;
     }
   }
 
-  getHeader(): HTMLElement {
-    return this.querySelector("tobago-sheet>header");
+  get scrollPosition(): number[] {
+    return JSON.parse(this.hiddenInputScrollPosition.value);
   }
 
-  getHeaderTable(): HTMLElement {
-    return this.querySelector("tobago-sheet>header>table");
+  set scrollPosition(value: number[]) {
+    this.hiddenInputScrollPosition.value = JSON.stringify(value);
   }
 
-  getHeaderCols(): NodeListOf<HTMLElement> {
-    return this.querySelectorAll("tobago-sheet>header>table>colgroup>col");
+  private get hiddenInputScrollPosition(): HTMLInputElement {
+    const rootNode = this.getRootNode() as ShadowRoot | Document;
+    return rootNode.getElementById(this.id + "::scrollPosition") as HTMLInputElement;
   }
 
-  getBody(): HTMLElement {
-    return this.querySelector("tobago-sheet>.tobago-body");
+  public get selectable(): Selectable {
+    return Selectable[this.dataset.tobagoSelectionMode];
   }
 
-  getBodyTable(): HTMLElement {
-    return this.querySelector("tobago-sheet>.tobago-body>table");
+  get selected(): Set<number> {
+    return new Set<number>(JSON.parse(this.hiddenInputSelected.value));
   }
 
-  getBodyCols(): NodeListOf<HTMLElement> {
-    return this.querySelectorAll("tobago-sheet>.tobago-body>table>colgroup>col");
+  set selected(value: Set<number>) {
+    const oldSelectedSet = this.selected;
+    this.hiddenInputSelected.value = JSON.stringify(Array.from(value));
+
+    const fireSelectionChangeEvent = oldSelectedSet.size !== value.size
+        || ![...oldSelectedSet].every((x) => value.has(x));
+    if (fireSelectionChangeEvent) {
+      this.dispatchEvent(new CustomEvent(ClientBehaviors.ROW_SELECTION_CHANGE, {
+        detail: {
+          selection: value,
+          rowsOnPage: this.rowsOnPage,
+          rowCount: this.rowCount
+        },
+      }));
+    }
   }
 
-  getHiddenExpanded(): HTMLInputElement {
+  private get hiddenInputSelected(): HTMLInputElement {
+    const rootNode = this.getRootNode() as ShadowRoot | Document;
+    return rootNode.getElementById(this.id + "::selected") as HTMLInputElement;
+  }
+
+  get hiddenExpanded(): HTMLInputElement {
     const rootNode = this.getRootNode() as ShadowRoot | Document;
     return rootNode.getElementById(this.id + "::expanded") as HTMLInputElement;
   }
 
-  getRowElements(): NodeListOf<HTMLTableRowElement> {
-    return this.getBodyTable().querySelectorAll(":scope > tbody > tr");
+  get lastClickedRowIndex(): number {
+    return Number(this.dataset.tobagoLastClickedRowIndex);
+  }
+
+  set lastClickedRowIndex(value: number) {
+    this.dataset.tobagoLastClickedRowIndex = String(value);
+  }
+
+  get lazy(): boolean {
+    return this.hasAttribute("lazy");
+  }
+
+  set lazy(update: boolean) {
+    if (update) {
+      this.setAttribute("lazy", "");
+    } else {
+      this.removeAttribute("lazy");
+    }
+  }
+
+  get lazyScrollPosition(): number[] {
+    return JSON.parse(this.hiddenInputLazyScrollPosition.value);
+  }
+
+  set lazyScrollPosition(value: number[]) {
+    this.hiddenInputLazyScrollPosition.value = JSON.stringify(value);
+  }
+
+  private get hiddenInputLazyScrollPosition(): HTMLInputElement {
+    const rootNode = this.getRootNode() as ShadowRoot | Document;
+    return rootNode.getElementById(this.id + "::lazyScrollPosition") as HTMLInputElement;
+  }
+
+  get lazyRows(): number {
+    return parseInt(this.getAttribute("lazy-rows"));
+  }
+
+  get first(): number {
+    return parseInt(this.dataset.tobagoFirst);
+  }
+
+  get rows(): number {
+    return parseInt(this.getAttribute("rows"));
+  }
+
+  get rowCount(): number {
+    return parseInt(this.getAttribute("row-count"));
+  }
+
+  get rowsOnPage(): number {
+    if (this.lazy || this.rows === 0 || this.rows >= this.rowCount) {
+      return this.rowCount;
+    } else {
+      return Math.min(this.rowCount - this.first, this.rows);
+    }
+  }
+
+  get header(): HTMLElement {
+    return this.querySelector(":scope > header");
+  }
+
+  get headerCols(): NodeListOf<HTMLElement> {
+    return this.querySelectorAll(":scope > header > table > colgroup > col");
+  }
+
+  get scrollbarFiller(): HTMLTableElement {
+    return this.header?.querySelector(":scope > .tobago-scrollbar-filler");
+  }
+
+  get body(): HTMLElement {
+    return this.querySelector(":scope > .tobago-body");
+  }
+
+  get bodyTable(): HTMLElement {
+    return this.querySelector(":scope > .tobago-body > table");
+  }
+
+  get bodyCols(): NodeListOf<HTMLElement> {
+    return this.bodyTable.querySelectorAll(":scope > colgroup > col");
+  }
+
+  get tableBody(): HTMLTableSectionElement {
+    return this.bodyTable.querySelector(":scope > tbody");
+  }
+
+  get rowElements(): NodeListOf<HTMLTableRowElement> {
+    return this.tableBody.querySelectorAll(":scope > tr");
+  }
+
+  get firstVisibleRowIndex(): number {
+    const rowElements = this.tableBody.rows;
+    let min = 0;
+    let max = rowElements.length;
+    let index: number;
+    while (min < max) {
+      index = Math.round((max - min) / 2) + min;
+      if (rowElements[index] === undefined
+          || rowElements[index].offsetTop > this.body.scrollTop) {
+        index--;
+        max = index;
+      } else {
+        min = index;
+      }
+    }
+
+    return this.getRowIndex(rowElements[index]);
   }
 }
 

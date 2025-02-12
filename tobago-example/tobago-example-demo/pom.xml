@@ -34,6 +34,7 @@
   <properties>
     <exec.version>1.6.0</exec.version>
     <tobago-theme-standard-dir>${basedir}/target/tobago-theme-standard</tobago-theme-standard-dir>
+    <tobago-theme-charlotteville-dir>${basedir}/target/tobago-theme-charlotteville</tobago-theme-charlotteville-dir>
     <docker-tomcat-dir>${project.build.directory}/docker-tomcat</docker-tomcat-dir>
     <frontend.skip>false</frontend.skip>
   </properties>
@@ -111,6 +112,7 @@
             <configuration>
               <target>
                 <mkdir dir="${tobago-theme-standard-dir}/META-INF/resources" />
+                <mkdir dir="${tobago-theme-charlotteville-dir}/META-INF/resources" />
               </target>
             </configuration>
             <goals>
@@ -118,36 +120,6 @@
             </goals>
           </execution>
         </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-maven-plugin</artifactId>
-        <configuration>
-          <loginServices>
-            <loginService implementation="org.eclipse.jetty.security.HashLoginService">
-              <name>demo-realm</name>
-              <config>src/test/resources/realm.properties</config>
-            </loginService>
-          </loginServices>
-          <stopKey>stopKey</stopKey>
-          <stopPort>9999</stopPort>
-          <systemProperties>
-            <systemProperty>
-              <name>derby.stream.error.file</name>
-              <value>target/derby.log</value>
-            </systemProperty>
-          </systemProperties>
-          <!--
-            <webApp>
-              <contextPath>/example</contextPath>
-            </webApp>
-          -->
-          <webApp>
-            <resourceBases>${basedir}/src/main/webapp,${tobago-theme-standard-dir}/META-INF/resources</resourceBases>
-          </webApp>
-        </configuration>
-        <dependencies>
-        </dependencies>
       </plugin>
       <plugin>
         <artifactId>maven-surefire-plugin</artifactId>
@@ -165,7 +137,7 @@
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
         <artifactId>selenium-java</artifactId>
-        <version>4.27.0</version>
+        <version>4.28.1</version>
       </dependency>
       <dependency>
         <groupId>com.google.guava</groupId>
@@ -209,7 +181,7 @@
     <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
-      <version>2.11.0</version>
+      <version>2.12.1</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -249,6 +221,23 @@
                     <artifactItem>
                       <groupId>org.apache.myfaces.tobago</groupId>
                       <artifactId>tobago-theme-standard</artifactId>
+                      <version>${project.version}</version>
+                    </artifactItem>
+                  </artifactItems>
+                </configuration>
+              </execution>
+              <execution>
+                <id>unpack-tobago-theme-charlotteville</id>
+                <phase>generate-resources</phase>
+                <goals>
+                  <goal>unpack</goal>
+                </goals>
+                <configuration>
+                  <outputDirectory>${tobago-theme-charlotteville-dir}</outputDirectory>
+                  <artifactItems>
+                    <artifactItem>
+                      <groupId>org.apache.myfaces.tobago</groupId>
+                      <artifactId>tobago-theme-charlotteville</artifactId>
                       <version>${project.version}</version>
                     </artifactItem>
                   </artifactItems>
@@ -441,6 +430,41 @@
 
     <profile>
       <id>jetty</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-maven-plugin</artifactId>
+            <configuration>
+              <loginServices>
+                <loginService implementation="org.eclipse.jetty.security.HashLoginService">
+                  <name>demo-realm</name>
+                  <config>src/test/resources/realm.properties</config>
+                </loginService>
+              </loginServices>
+              <stopKey>stopKey</stopKey>
+              <stopPort>9999</stopPort>
+              <systemProperties>
+                <systemProperty>
+                  <name>derby.stream.error.file</name>
+                  <value>target/derby.log</value>
+                </systemProperty>
+              </systemProperties>
+              <!--
+                <webApp>
+                  <contextPath>/example</contextPath>
+                </webApp>
+              -->
+              <webApp>
+                <resourceBases>${basedir}/src/main/webapp,${tobago-theme-standard-dir}/META-INF/resources,${tobago-theme-charlotteville-dir}/META-INF/resources
+                </resourceBases>
+              </webApp>
+            </configuration>
+            <dependencies>
+            </dependencies>
+          </plugin>
+        </plugins>
+      </build>
       <dependencies>
         <dependency>
           <groupId>org.hibernate.validator</groupId>
